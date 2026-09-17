@@ -96,7 +96,7 @@ export default function App() {
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                   >
-                    Explore plants <span>↗</span>
+                    Get Started <span>↗</span>
                   </button>
 
                   <button
