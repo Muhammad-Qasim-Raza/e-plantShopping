@@ -11,6 +11,7 @@ import { removeItem, updateQuantity } from "./CartSlice";
  * - Cart total calculation
  * - Empty-cart state
  * - Checkout feedback
+ * - Invalid product price handling
  */
 export default function CartItem({ onNavigate }) {
   const dispatch = useDispatch();
@@ -20,15 +21,50 @@ export default function CartItem({ onNavigate }) {
   const [message, setMessage] = useState("");
 
   /**
+   * Validates a product price before using it in calculations.
+   *
+   * A valid price must be:
+   * - A number
+   * - Finite
+   * - Zero or greater
+   */
+  const isValidPrice = (price) => {
+    const numericPrice = Number(price);
+
+    return Number.isFinite(numericPrice) && numericPrice >= 0;
+  };
+
+  /**
+   * Safely converts a quantity into a valid positive number.
+   */
+  const getSafeQuantity = (quantity) => {
+    const numericQuantity = Number(quantity);
+
+    if (!Number.isFinite(numericQuantity) || numericQuantity <= 0) {
+      return 1;
+    }
+
+    return Math.floor(numericQuantity);
+  };
+
+  /**
    * Calculates the complete cart amount.
    *
-   * Each product's price is multiplied by its quantity,
-   * then all product totals are added together.
+   * Invalid or missing prices are safely ignored instead of
+   * causing NaN or invalid totals to appear in the UI.
    */
   const calculateTotalAmount = () => {
     return cartItems.reduce((total, item) => {
-      const price = Number(item.price) || 0;
-      const quantity = Number(item.quantity) || 0;
+      if (!item || !isValidPrice(item.price)) {
+        return total;
+      }
+
+      const price = Number(item.price);
+      const quantity = Number(item.quantity);
+
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return total;
+      }
 
       return total + price * quantity;
     }, 0);
@@ -37,22 +73,34 @@ export default function CartItem({ onNavigate }) {
   /**
    * Calculates the total number of individual plants
    * currently selected in the cart.
+   *
+   * Invalid quantities are ignored safely.
    */
   const calculateTotalItems = () => {
     return cartItems.reduce((total, item) => {
-      return total + (Number(item.quantity) || 0);
+      if (!item) {
+        return total;
+      }
+
+      const quantity = Number(item.quantity);
+
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return total;
+      }
+
+      return total + Math.floor(quantity);
     }, 0);
   };
 
   /**
-   * Decreases a product quantity.
+   * Decreases a product quantity by one.
    *
-   * Quantity is never allowed to become less than 1.
-   * If the user wants to remove the product completely,
-   * they can use the Remove button.
+   * When the quantity reaches zero, CartSlice removes
+   * the product from the cart.
    */
   const handleDecrease = (item) => {
-    const newQuantity = Math.max(1, Number(item.quantity) - 1);
+    const currentQuantity = getSafeQuantity(item.quantity);
+    const newQuantity = currentQuantity - 1;
 
     dispatch(
       updateQuantity({
@@ -60,13 +108,16 @@ export default function CartItem({ onNavigate }) {
         quantity: newQuantity,
       }),
     );
+
+    setMessage("");
   };
 
   /**
    * Increases a product quantity by one.
    */
   const handleIncrease = (item) => {
-    const newQuantity = Number(item.quantity) + 1;
+    const currentQuantity = getSafeQuantity(item.quantity);
+    const newQuantity = currentQuantity + 1;
 
     dispatch(
       updateQuantity({
@@ -74,6 +125,8 @@ export default function CartItem({ onNavigate }) {
         quantity: newQuantity,
       }),
     );
+
+    setMessage("");
   };
 
   /**
@@ -86,7 +139,7 @@ export default function CartItem({ onNavigate }) {
   };
 
   /**
-   * Displays a temporary checkout status message.
+   * Displays a checkout status message.
    */
   const handleCheckout = () => {
     setMessage("Checkout is coming soon — your cart is ready.");
@@ -160,15 +213,22 @@ export default function CartItem({ onNavigate }) {
       <section className="cart-layout">
         <div className="cart-list">
           {cartItems.map((item) => {
-            const price = Number(item.price) || 0;
-            const quantity = Math.max(1, Number(item.quantity) || 1);
+            /*
+             * Validate product data before displaying it.
+             * Invalid prices are displayed as $0.00 rather than
+             * allowing NaN or Infinity to reach the UI.
+             */
+            const hasValidPrice = isValidPrice(item?.price);
+            const price = hasValidPrice ? Number(item.price) : 0;
+
+            const quantity = getSafeQuantity(item?.quantity);
             const itemTotal = price * quantity;
 
             return (
               <article className="cart-card" key={item.id}>
                 <img
                   src={item.image}
-                  alt={item.name}
+                  alt={item.name || "Plant"}
                   loading="lazy"
                   onError={(event) => {
                     event.currentTarget.style.opacity = "0.5";
@@ -178,20 +238,33 @@ export default function CartItem({ onNavigate }) {
                 <div className="cart-product">
                   <span className="cart-product-label">PARADISE NURSERY</span>
 
-                  <h2>{item.name}</h2>
+                  <h2>{item.name || "Unnamed Plant"}</h2>
 
                   <p>Unit price: ${price.toFixed(2)}</p>
+
+                  {!hasValidPrice && (
+                    <p
+                      role="alert"
+                      style={{
+                        color: "#b8e86d",
+                        marginTop: "6px",
+                      }}
+                    >
+                      Price information is currently unavailable.
+                    </p>
+                  )}
 
                   <div className="quantity-row">
                     <div
                       className="quantity-control"
-                      aria-label={`Quantity controls for ${item.name}`}
+                      aria-label={`Quantity controls for ${
+                        item.name || "plant"
+                      }`}
                     >
                       <button
                         type="button"
                         onClick={() => handleDecrease(item)}
-                        disabled={quantity <= 1}
-                        aria-label={`Decrease ${item.name} quantity`}
+                        aria-label={`Decrease ${item.name || "plant"} quantity`}
                       >
                         −
                       </button>
@@ -201,7 +274,7 @@ export default function CartItem({ onNavigate }) {
                       <button
                         type="button"
                         onClick={() => handleIncrease(item)}
-                        aria-label={`Increase ${item.name} quantity`}
+                        aria-label={`Increase ${item.name || "plant"} quantity`}
                       >
                         +
                       </button>
@@ -211,7 +284,7 @@ export default function CartItem({ onNavigate }) {
                       type="button"
                       className="remove-btn"
                       onClick={() => handleRemove(item.id)}
-                      aria-label={`Remove ${item.name} from cart`}
+                      aria-label={`Remove ${item.name || "plant"} from cart`}
                     >
                       Remove
                     </button>
