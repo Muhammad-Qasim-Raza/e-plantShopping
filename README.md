@@ -42,7 +42,7 @@ Open the local URL shown by Vite.
 npm run build
 ```
 
-## Assignment files
+## Project files
 
 - `README.md`
 - `src/AboutUs.jsx`
